@@ -3,8 +3,6 @@ import { ReactElement, useEffect, useLayoutEffect, useRef, useState } from "reac
 import { createRoot } from "react-dom/client";
 import * as THREE from "three";
 
-import navballTexture from "./assets/navball-texture.png";
-
 function NavballPanel({ context }: { context: PanelExtensionContext }): ReactElement {
   const containerRef = useRef<HTMLDivElement>(null);
   const [_, setTopics] = useState<undefined | Immutable<Topic[]>>();
@@ -45,9 +43,53 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // Load texture
-    const textureLoader = new THREE.TextureLoader();
-    const texture = textureLoader.load(navballTexture);
+    // Create a canvas to generate the texture
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Set canvas size
+    canvas.width = 512;
+    canvas.height = 512;
+
+    // Draw a basic navball texture
+    ctx.fillStyle = "#1a1a1a";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw grid lines
+    ctx.strokeStyle = "#333333";
+    ctx.lineWidth = 2;
+
+    // Draw latitude lines
+    for (let i = 0; i <= 8; i++) {
+      const y = (canvas.height * i) / 8;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(canvas.width, y);
+      ctx.stroke();
+    }
+
+    // Draw longitude lines
+    for (let i = 0; i <= 8; i++) {
+      const x = (canvas.width * i) / 8;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, canvas.height);
+      ctx.stroke();
+    }
+
+    // Draw cardinal points
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 24px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("N", canvas.width / 2, 40);
+    ctx.fillText("S", canvas.width / 2, canvas.height - 40);
+    ctx.fillText("E", canvas.width - 40, canvas.height / 2);
+    ctx.fillText("W", 40, canvas.height / 2);
+
+    // Create texture from canvas
+    const texture = new THREE.CanvasTexture(canvas);
     textureRef.current = texture;
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
