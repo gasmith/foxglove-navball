@@ -2,6 +2,7 @@ import { Immutable, MessageEvent, PanelExtensionContext, Topic, RenderState } fr
 import { ReactElement, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import * as THREE from "three";
+import navballTexture from "./assets/navball-texture.png";
 
 function NavballPanel({ context }: { context: PanelExtensionContext }): ReactElement {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -12,6 +13,8 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sphereRef = useRef<THREE.Mesh | null>(null);
+  const textureRef = useRef<THREE.Texture | null>(null);
+  const markerRef = useRef<THREE.Group | null>(null);
 
   // Initialize Three.js scene
   useEffect(() => {
@@ -23,33 +26,86 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
 
     // Create camera
     const camera = new THREE.PerspectiveCamera(
-      75,
+      60,
       containerRef.current.clientWidth / containerRef.current.clientHeight,
       0.1,
       1000
     );
-    camera.position.z = 5;
+    camera.position.z = 3;
     cameraRef.current = camera;
 
     // Create renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ 
+      antialias: true,
+      alpha: true 
+    });
     renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
+    renderer.setClearColor(0x000000, 0);
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // Create sphere (placeholder for now)
-    const geometry = new THREE.SphereGeometry(2, 32, 32);
-    const material = new THREE.MeshStandardMaterial({ color: 0x808080 });
+    // Load texture
+    const textureLoader = new THREE.TextureLoader();
+    const texture = textureLoader.load(navballTexture);
+    textureRef.current = texture;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.format = THREE.RGBAFormat;
+
+    // Create sphere with texture
+    const geometry = new THREE.SphereGeometry(1.5, 64, 64);
+    const material = new THREE.MeshPhongMaterial({
+      map: texture,
+      shininess: 30,
+      specular: 0x444444,
+      transparent: true,
+      opacity: 1
+    });
     const sphere = new THREE.Mesh(geometry, material);
     scene.add(sphere);
     sphereRef.current = sphere;
 
+    // Create attitude marker
+    const markerGroup = new THREE.Group();
+    
+    // Create a small red sphere for the marker
+    const markerGeometry = new THREE.SphereGeometry(0.05, 16, 16);
+    const markerMaterial = new THREE.MeshPhongMaterial({
+      color: 0xff0000,
+      shininess: 100,
+      specular: 0xffffff
+    });
+    const markerSphere = new THREE.Mesh(markerGeometry, markerMaterial);
+    markerSphere.position.y = 1.6; // Position slightly above the navball
+    markerGroup.add(markerSphere);
+
+    // Add a small line pointing down
+    const lineGeometry = new THREE.CylinderGeometry(0.02, 0.02, 0.1, 8);
+    const lineMaterial = new THREE.MeshPhongMaterial({
+      color: 0xff0000,
+      shininess: 100,
+      specular: 0xffffff
+    });
+    const line = new THREE.Mesh(lineGeometry, lineMaterial);
+    line.position.y = 1.55; // Position between the sphere and navball
+    line.rotation.x = Math.PI / 2; // Rotate to point downward
+    markerGroup.add(line);
+
+    scene.add(markerGroup);
+    markerRef.current = markerGroup;
+
     // Add lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(5, 5, 5);
     scene.add(directionalLight);
+
+    // Add a second directional light from the opposite direction for better illumination
+    const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
+    directionalLight2.position.set(-5, -5, -5);
+    scene.add(directionalLight2);
 
     // Animation loop
     const animate = () => {
@@ -105,9 +161,9 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
     context.watch("currentFrame");
   }, [context]);
 
-  // Update sphere rotation based on quaternion messages
+  // Update sphere and marker rotation based on quaternion messages
   useEffect(() => {
-    if (!messages || !sphereRef.current) return;
+    if (!messages || !sphereRef.current || !markerRef.current) return;
 
     const quaternionMessage = messages.find(
       (msg: MessageEvent) => {
@@ -119,6 +175,8 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
     if (quaternionMessage && quaternionMessage.message) {
       const quaternion = quaternionMessage.message as { x: number; y: number; z: number; w: number };
       sphereRef.current.quaternion.set(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
+      // Apply the same rotation to the marker
+      markerRef.current.quaternion.set(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
     }
   }, [messages]);
 
