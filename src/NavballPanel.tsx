@@ -1,52 +1,126 @@
-import { Immutable, MessageEvent, PanelExtensionContext, Topic } from "@foxglove/extension";
-import { ReactElement, useEffect, useLayoutEffect, useState } from "react";
+import { Immutable, MessageEvent, PanelExtensionContext, Topic, RenderState } from "@foxglove/extension";
+import { ReactElement, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import * as THREE from "three";
 
 function NavballPanel({ context }: { context: PanelExtensionContext }): ReactElement {
+  const containerRef = useRef<HTMLDivElement>(null);
   const [topics, setTopics] = useState<undefined | Immutable<Topic[]>>();
   const [messages, setMessages] = useState<undefined | Immutable<MessageEvent[]>>();
-
   const [renderDone, setRenderDone] = useState<(() => void) | undefined>();
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const sphereRef = useRef<THREE.Mesh | null>(null);
 
-  // We use a layout effect to setup render handling for our panel. We also setup some topic subscriptions.
-  useLayoutEffect(() => {
-    // The render handler is run by the broader studio system during playback when your panel
-    // needs to render because the fields it is watching have changed. How you handle rendering depends on your framework.
-    // You can only setup one render handler - usually early on in setting up your panel.
-    //
-    // Without a render handler your panel will never receive updates.
-    //
-    // The render handler could be invoked as often as 60hz during playback if fields are changing often.
-    context.onRender = (renderState, done) => {
-      // render functions receive a _done_ callback. You MUST call this callback to indicate your panel has finished rendering.
-      // Your panel will not receive another render callback until _done_ is called from a prior render. If your panel is not done
-      // rendering before the next render call, studio shows a notification to the user that your panel is delayed.
-      //
-      // Set the done callback into a state variable to trigger a re-render.
-      setRenderDone(() => done);
+  // Initialize Three.js scene
+  useEffect(() => {
+    if (!containerRef.current) return;
 
-      // We may have new topics - since we are also watching for messages in the current frame, topics may not have changed
-      // It is up to you to determine the correct action when state has not changed.
-      setTopics(renderState.topics);
+    // Create scene
+    const scene = new THREE.Scene();
+    sceneRef.current = scene;
 
-      // currentFrame has messages on subscribed topics since the last render call
-      setMessages(renderState.currentFrame);
+    // Create camera
+    const camera = new THREE.PerspectiveCamera(
+      75,
+      containerRef.current.clientWidth / containerRef.current.clientHeight,
+      0.1,
+      1000
+    );
+    camera.position.z = 5;
+    cameraRef.current = camera;
+
+    // Create renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
+    containerRef.current.appendChild(renderer.domElement);
+    rendererRef.current = renderer;
+
+    // Create sphere (placeholder for now)
+    const geometry = new THREE.SphereGeometry(2, 32, 32);
+    const material = new THREE.MeshStandardMaterial({ color: 0x808080 });
+    const sphere = new THREE.Mesh(geometry, material);
+    scene.add(sphere);
+    sphereRef.current = sphere;
+
+    // Add lights
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientLight);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    directionalLight.position.set(5, 5, 5);
+    scene.add(directionalLight);
+
+    // Animation loop
+    const animate = () => {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    // Cleanup
+    return () => {
+      renderer.dispose();
+      containerRef.current?.removeChild(renderer.domElement);
+    };
+  }, []);
+
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (!containerRef.current || !cameraRef.current || !rendererRef.current) return;
+      
+      const width = containerRef.current.clientWidth;
+      const height = containerRef.current.clientHeight;
+      
+      cameraRef.current.aspect = width / height;
+      cameraRef.current.updateProjectionMatrix();
+      rendererRef.current.setSize(width, height);
     };
 
-    // After adding a render handler, you must indicate which fields from RenderState will trigger updates.
-    // If you do not watch any fields then your panel will never render since the panel context will assume you do not want any updates.
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
-    // tell the panel context that we care about any update to the _topic_ field of RenderState
+  // Subscribe to quaternion topic
+  useLayoutEffect(() => {
+    context.onRender = (renderState, done) => {
+      setRenderDone(() => done);
+      setTopics(renderState.topics);
+      setMessages(renderState.currentFrame);
+
+      // Find the topic with foxglove.Quaternion schema
+      if (renderState.topics) {
+        const quaternionTopic = renderState.topics.find(
+          (topic: Topic) => topic.schemaName === "foxglove.Quaternion"
+        );
+
+        if (quaternionTopic) {
+          context.subscribe([{ topic: quaternionTopic.name }]);
+        }
+      }
+    };
+
     context.watch("topics");
-
-    // tell the panel context we want messages for the current frame for topics we've subscribed to
-    // This corresponds to the _currentFrame_ field of render state.
     context.watch("currentFrame");
-
-    // subscribe to some topics, you could do this within other effects, based on input fields, etc
-    // Once you subscribe to topics, currentFrame will contain message events from those topics (assuming there are messages).
-    context.subscribe([{ topic: "/some/topic" }]);
   }, [context]);
+
+  // Update sphere rotation based on quaternion messages
+  useEffect(() => {
+    if (!messages || !sphereRef.current) return;
+
+    const quaternionMessage = messages.find(
+      (msg: MessageEvent) => {
+        const topic = msg.topic as unknown as Topic;
+        return topic && topic.schemaName === "foxglove.Quaternion";
+      }
+    );
+
+    if (quaternionMessage && quaternionMessage.message) {
+      const quaternion = quaternionMessage.message as { x: number; y: number; z: number; w: number };
+      sphereRef.current.quaternion.set(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
+    }
+  }, [messages]);
 
   // invoke the done callback once the render is complete
   useEffect(() => {
@@ -54,24 +128,8 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
   }, [renderDone]);
 
   return (
-    <div style={{ padding: "1rem" }}>
-      <h2>Welcome to your new extension panel!</h2>
-      <p>
-        Check the{" "}
-        <a href="https://foxglove.dev/docs/studio/extensions/getting-started">documentation</a> for
-        more details on building extension panels for Foxglove Studio.
-      </p>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", rowGap: "0.2rem" }}>
-        <b style={{ borderBottom: "1px solid" }}>Topic</b>
-        <b style={{ borderBottom: "1px solid" }}>Schema name</b>
-        {(topics ?? []).map((topic) => (
-          <>
-            <div key={topic.name}>{topic.name}</div>
-            <div key={topic.schemaName}>{topic.schemaName}</div>
-          </>
-        ))}
-      </div>
-      <div>{messages?.length}</div>
+    <div style={{ width: "100%", height: "100%" }} ref={containerRef}>
+      {/* Three.js canvas will be inserted here */}
     </div>
   );
 }
@@ -80,7 +138,6 @@ export function initNavballPanel(context: PanelExtensionContext): () => void {
   const root = createRoot(context.panelElement);
   root.render(<NavballPanel context={context} />);
 
-  // Return a function to run when the panel is removed
   return () => {
     root.unmount();
   };

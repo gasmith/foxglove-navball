@@ -23,6 +23,7 @@
     "@foxglove/extension": "2.23.0",
     "@types/react": "18.3.20",
     "@types/react-dom": "18.3.5",
+    "@types/three": "^0.174.0",
     "create-foxglove-extension": "1.0.4",
     "eslint": "9.23.0",
     "prettier": "3.5.3",
