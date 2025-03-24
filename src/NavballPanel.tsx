@@ -1,12 +1,13 @@
-import { Immutable, MessageEvent, PanelExtensionContext, Topic, RenderState } from "@foxglove/extension";
+import { Immutable, MessageEvent, PanelExtensionContext, Topic } from "@foxglove/extension";
 import { ReactElement, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import * as THREE from "three";
+
 import navballTexture from "./assets/navball-texture.png";
 
 function NavballPanel({ context }: { context: PanelExtensionContext }): ReactElement {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [topics, setTopics] = useState<undefined | Immutable<Topic[]>>();
+  const [_, setTopics] = useState<undefined | Immutable<Topic[]>>();
   const [messages, setMessages] = useState<undefined | Immutable<MessageEvent[]>>();
   const [renderDone, setRenderDone] = useState<(() => void) | undefined>();
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -29,15 +30,15 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
       60,
       containerRef.current.clientWidth / containerRef.current.clientHeight,
       0.1,
-      1000
+      1000,
     );
     camera.position.z = 3;
     cameraRef.current = camera;
 
     // Create renderer
-    const renderer = new THREE.WebGLRenderer({ 
+    const renderer = new THREE.WebGLRenderer({
       antialias: true,
-      alpha: true 
+      alpha: true,
     });
     renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
     renderer.setClearColor(0x000000, 0);
@@ -59,7 +60,7 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
       shininess: 30,
       specular: 0x444444,
       transparent: true,
-      opacity: 1
+      opacity: 1,
     });
     const sphere = new THREE.Mesh(geometry, material);
     scene.add(sphere);
@@ -67,13 +68,13 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
 
     // Create attitude marker
     const markerGroup = new THREE.Group();
-    
+
     // Create a small red sphere for the marker
     const markerGeometry = new THREE.SphereGeometry(0.05, 16, 16);
     const markerMaterial = new THREE.MeshPhongMaterial({
       color: 0xff0000,
       shininess: 100,
-      specular: 0xffffff
+      specular: 0xffffff,
     });
     const markerSphere = new THREE.Mesh(markerGeometry, markerMaterial);
     markerSphere.position.y = 1.6; // Position slightly above the navball
@@ -84,7 +85,7 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
     const lineMaterial = new THREE.MeshPhongMaterial({
       color: 0xff0000,
       shininess: 100,
-      specular: 0xffffff
+      specular: 0xffffff,
     });
     const line = new THREE.Mesh(lineGeometry, lineMaterial);
     line.position.y = 1.55; // Position between the sphere and navball
@@ -97,7 +98,7 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
     // Add lights
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
-    
+
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(5, 5, 5);
     scene.add(directionalLight);
@@ -125,17 +126,17 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
   useEffect(() => {
     const handleResize = () => {
       if (!containerRef.current || !cameraRef.current || !rendererRef.current) return;
-      
+
       const width = containerRef.current.clientWidth;
       const height = containerRef.current.clientHeight;
-      
+
       cameraRef.current.aspect = width / height;
       cameraRef.current.updateProjectionMatrix();
       rendererRef.current.setSize(width, height);
     };
 
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   // Subscribe to quaternion topic
@@ -148,7 +149,7 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
       // Find the topic with foxglove.Quaternion schema
       if (renderState.topics) {
         const quaternionTopic = renderState.topics.find(
-          (topic: Topic) => topic.schemaName === "foxglove.Quaternion"
+          (topic: Topic) => topic.schemaName === "foxglove.Quaternion",
         );
 
         if (quaternionTopic) {
@@ -165,15 +166,18 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
   useEffect(() => {
     if (!messages || !sphereRef.current || !markerRef.current) return;
 
-    const quaternionMessage = messages.find(
-      (msg: MessageEvent) => {
-        const topic = msg.topic as unknown as Topic;
-        return topic && topic.schemaName === "foxglove.Quaternion";
-      }
-    );
+    const quaternionMessage = messages.find((msg: MessageEvent) => {
+      const topic = msg.topic as unknown as Topic;
+      return topic && topic.schemaName === "foxglove.Quaternion";
+    });
 
     if (quaternionMessage && quaternionMessage.message) {
-      const quaternion = quaternionMessage.message as { x: number; y: number; z: number; w: number };
+      const quaternion = quaternionMessage.message as {
+        x: number;
+        y: number;
+        z: number;
+        w: number;
+      };
       sphereRef.current.quaternion.set(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
       // Apply the same rotation to the marker
       markerRef.current.quaternion.set(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
