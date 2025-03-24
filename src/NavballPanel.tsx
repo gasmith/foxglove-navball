@@ -3,9 +3,13 @@ import { ReactElement, useEffect, useLayoutEffect, useRef, useState } from "reac
 import { createRoot } from "react-dom/client";
 import * as THREE from "three";
 
+type NavballSettings = {
+  quaternionTopic: string;
+};
+
 function NavballPanel({ context }: { context: PanelExtensionContext }): ReactElement {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [_, setTopics] = useState<undefined | Immutable<Topic[]>>();
+  const [topics, setTopics] = useState<undefined | Immutable<Topic[]>>();
   const [messages, setMessages] = useState<undefined | Immutable<MessageEvent[]>>();
   const [renderDone, setRenderDone] = useState<(() => void) | undefined>();
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -14,6 +18,14 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
   const sphereRef = useRef<THREE.Mesh | null>(null);
   const textureRef = useRef<THREE.Texture | null>(null);
   const markerRef = useRef<THREE.Group | null>(null);
+  const [settings, setSettings] = useState<NavballSettings>(() => ({
+    quaternionTopic: (context.initialState as NavballSettings)?.quaternionTopic ?? "",
+  }));
+
+  // Save settings when they change
+  useEffect(() => {
+    context.saveState(settings);
+  }, [context, settings]);
 
   // Initialize Three.js scene
   useEffect(() => {
@@ -188,30 +200,23 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
       setTopics(renderState.topics);
       setMessages(renderState.currentFrame);
 
-      // Find the topic with foxglove.Quaternion schema
-      if (renderState.topics) {
-        const quaternionTopic = renderState.topics.find(
-          (topic: Topic) => topic.schemaName === "foxglove.Quaternion",
-        );
-
-        if (quaternionTopic) {
-          context.subscribe([{ topic: quaternionTopic.name }]);
-        }
+      // Subscribe to the selected topic
+      if (settings.quaternionTopic) {
+        context.subscribe([{ topic: settings.quaternionTopic }]);
       }
     };
 
     context.watch("topics");
     context.watch("currentFrame");
-  }, [context]);
+  }, [context, settings.quaternionTopic]);
 
   // Update sphere and marker rotation based on quaternion messages
   useEffect(() => {
     if (!messages || !sphereRef.current || !markerRef.current) return;
 
-    const quaternionMessage = messages.find((msg: MessageEvent) => {
-      const topic = msg.topic as unknown as Topic;
-      return topic && topic.schemaName === "foxglove.Quaternion";
-    });
+    const quaternionMessage = messages.find(
+      (msg: MessageEvent) => msg.topic === settings.quaternionTopic,
+    );
 
     if (quaternionMessage && quaternionMessage.message) {
       const quaternion = quaternionMessage.message as {
@@ -224,7 +229,7 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
       // Apply the same rotation to the marker
       markerRef.current.quaternion.set(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
     }
-  }, [messages]);
+  }, [messages, settings.quaternionTopic]);
 
   // invoke the done callback once the render is complete
   useEffect(() => {
@@ -232,8 +237,24 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
   }, [renderDone]);
 
   return (
-    <div style={{ width: "100%", height: "100%" }} ref={containerRef}>
-      {/* Three.js canvas will be inserted here */}
+    <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
+      <div style={{ padding: "8px", borderBottom: "1px solid #ccc" }}>
+        <select
+          value={settings.quaternionTopic}
+          onChange={(e) => setSettings({ ...settings, quaternionTopic: e.target.value })}
+          style={{ width: "100%", padding: "4px" }}
+        >
+          <option value="">Select a quaternion topic</option>
+          {topics?.map((topic) => (
+            <option key={topic.name} value={topic.name}>
+              {topic.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div style={{ flex: 1 }} ref={containerRef}>
+        {/* Three.js canvas will be inserted here */}
+      </div>
     </div>
   );
 }
