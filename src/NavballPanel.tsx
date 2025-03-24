@@ -1,4 +1,11 @@
-import { Immutable, MessageEvent, PanelExtensionContext, Topic } from "@foxglove/extension";
+import {
+  Immutable,
+  MessageEvent,
+  PanelExtensionContext,
+  Topic,
+  SettingsTree,
+  SettingsTreeAction,
+} from "@foxglove/extension";
 import { ReactElement, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import * as THREE from "three";
@@ -9,7 +16,7 @@ type NavballSettings = {
 
 function NavballPanel({ context }: { context: PanelExtensionContext }): ReactElement {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [topics, setTopics] = useState<undefined | Immutable<Topic[]>>();
+  const [_, setTopics] = useState<undefined | Immutable<Topic[]>>();
   const [messages, setMessages] = useState<undefined | Immutable<MessageEvent[]>>();
   const [renderDone, setRenderDone] = useState<(() => void) | undefined>();
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -21,6 +28,39 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
   const [settings, setSettings] = useState<NavballSettings>(() => ({
     quaternionTopic: (context.initialState as NavballSettings)?.quaternionTopic ?? "",
   }));
+
+  // Define settings tree
+  useEffect(() => {
+    const settingsTree: SettingsTree = {
+      nodes: {
+        general: {
+          label: "General",
+          fields: {
+            topic: {
+              label: "Topic",
+              input: "string",
+              value: settings.quaternionTopic,
+            },
+          },
+        },
+      },
+      actionHandler: (action: SettingsTreeAction) => {
+        switch (action.action) {
+          case "perform-node-action":
+            break;
+          case "update":
+            if (action.payload.path[0] === "general" && action.payload.path[1] === "topic") {
+              const newValue = action.payload.value;
+              if (typeof newValue === "string") {
+                setSettings((prev) => ({ ...prev, quaternionTopic: newValue }));
+              }
+            }
+            break;
+        }
+      },
+    };
+    context.updatePanelSettingsEditor(settingsTree);
+  }, [context, settings.quaternionTopic]);
 
   // Save settings when they change
   useEffect(() => {
@@ -237,24 +277,8 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
   }, [renderDone]);
 
   return (
-    <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
-      <div style={{ padding: "8px", borderBottom: "1px solid #ccc" }}>
-        <select
-          value={settings.quaternionTopic}
-          onChange={(e) => setSettings({ ...settings, quaternionTopic: e.target.value })}
-          style={{ width: "100%", padding: "4px" }}
-        >
-          <option value="">Select a quaternion topic</option>
-          {topics?.map((topic) => (
-            <option key={topic.name} value={topic.name}>
-              {topic.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div style={{ flex: 1 }} ref={containerRef}>
-        {/* Three.js canvas will be inserted here */}
-      </div>
+    <div style={{ width: "100%", height: "100%" }} ref={containerRef}>
+      {/* Three.js canvas will be inserted here */}
     </div>
   );
 }
