@@ -8,15 +8,7 @@ import {
 } from "@foxglove/extension";
 import { produce } from "immer";
 import { set } from "lodash";
-import {
-  ReactElement,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { ReactElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import * as THREE from "three";
 
