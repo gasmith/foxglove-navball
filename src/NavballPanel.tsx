@@ -6,17 +6,27 @@ import {
   SettingsTree,
   SettingsTreeAction,
 } from "@foxglove/extension";
-import { ReactElement, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { produce } from "immer";
+import { set } from "lodash";
+import {
+  ReactElement,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createRoot } from "react-dom/client";
 import * as THREE from "three";
 
-type NavballSettings = {
-  quaternionTopic: string;
+type PanelState = {
+  topic?: string;
 };
 
 function NavballPanel({ context }: { context: PanelExtensionContext }): ReactElement {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [_, setTopics] = useState<undefined | Immutable<Topic[]>>();
+  const [topics, setTopics] = useState<undefined | Immutable<Topic[]>>();
   const [messages, setMessages] = useState<undefined | Immutable<MessageEvent[]>>();
   const [renderDone, setRenderDone] = useState<(() => void) | undefined>();
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -25,51 +35,74 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
   const sphereRef = useRef<THREE.Mesh | null>(null);
   const textureRef = useRef<THREE.Texture | null>(null);
   const markerRef = useRef<THREE.Group | null>(null);
-  const [settings, setSettings] = useState<NavballSettings>(() => ({
-    quaternionTopic: (context.initialState as NavballSettings)?.quaternionTopic ?? "",
-  }));
+
+  // Restore state from the layout.
+  const [state, setState] = useState<PanelState>(() => {
+    return context.initialState as PanelState;
+  });
+
+  // Filter topics for quaternions.
+  const quatTopics = useMemo(
+    () => (topics ?? []).filter((topic) => topic.schemaName === "foxglove.Quaternion"),
+    [topics],
+  );
+
+  // Save settings when they change
+  useEffect(() => {
+    context.saveState({ topic: state.topic });
+    if (state.topic) {
+      context.subscribe([{ topic: state.topic }]);
+    }
+  }, [context, state.topic]);
+
+  // Use the first available quaternion topic as a default, once we have a list
+  // of topics available.
+  useEffect(() => {
+    if (state.topic == undefined) {
+      setState({ topic: quatTopics[0]?.name });
+    }
+  }, [state.topic, quatTopics]);
+
+  // Respond to actions from the settings editor.
+  const actionHandler = useCallback(
+    (action: SettingsTreeAction) => {
+      if (action.action === "update") {
+        const { path, value } = action.payload;
+        setState(produce((draft) => set(draft, path, value)));
+        if (path[1] === "topic") {
+          context.subscribe([{ topic: value as string }]);
+        }
+      }
+    },
+    [context],
+  );
 
   // Define settings tree
   useEffect(() => {
     const settingsTree: SettingsTree = {
+      actionHandler,
       nodes: {
-        general: {
+        fields: {
           label: "General",
           fields: {
             topic: {
               label: "Topic",
-              input: "string",
-              value: settings.quaternionTopic,
+              input: "select",
+              options: quatTopics.map((topic) => ({ value: topic.name, label: topic.name })),
+              value: state.topic,
             },
           },
         },
       },
-      actionHandler: (action: SettingsTreeAction) => {
-        switch (action.action) {
-          case "perform-node-action":
-            break;
-          case "update":
-            if (action.payload.path[0] === "general" && action.payload.path[1] === "topic") {
-              const newValue = action.payload.value;
-              if (typeof newValue === "string") {
-                setSettings((prev) => ({ ...prev, quaternionTopic: newValue }));
-              }
-            }
-            break;
-        }
-      },
     };
     context.updatePanelSettingsEditor(settingsTree);
-  }, [context, settings.quaternionTopic]);
-
-  // Save settings when they change
-  useEffect(() => {
-    context.saveState(settings);
-  }, [context, settings]);
+  }, [context, state.topic, quatTopics]);
 
   // Initialize Three.js scene
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current) {
+      return;
+    }
 
     // Create scene
     const scene = new THREE.Scene();
@@ -98,7 +131,9 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
     // Create a canvas to generate the texture
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    if (!ctx) {
+      return;
+    }
 
     // Set canvas size
     canvas.width = 512;
@@ -219,7 +254,9 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
   // Handle window resize
   useEffect(() => {
     const handleResize = () => {
-      if (!containerRef.current || !cameraRef.current || !rendererRef.current) return;
+      if (!containerRef.current || !cameraRef.current || !rendererRef.current) {
+        return;
+      }
 
       const width = containerRef.current.clientWidth;
       const height = containerRef.current.clientHeight;
@@ -230,7 +267,10 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
     };
 
     window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      return;
+    };
   }, []);
 
   // Subscribe to quaternion topic
@@ -238,28 +278,30 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
     context.onRender = (renderState, done) => {
       setRenderDone(() => done);
       setTopics(renderState.topics);
-      setMessages(renderState.currentFrame);
-
-      // Subscribe to the selected topic
-      if (settings.quaternionTopic) {
-        context.subscribe([{ topic: settings.quaternionTopic }]);
+      if (renderState.currentFrame) {
+        setMessages(renderState.currentFrame);
       }
     };
 
     context.watch("topics");
     context.watch("currentFrame");
-  }, [context, settings.quaternionTopic]);
+
+    // Subscribe to the selected topic
+    if (state.topic) {
+      context.subscribe([{ topic: state.topic }]);
+    }
+  }, [context, state.topic]);
 
   // Update sphere and marker rotation based on quaternion messages
   useEffect(() => {
-    if (!messages || !sphereRef.current || !markerRef.current) return;
+    if (!messages || !sphereRef.current || !markerRef.current) {
+      return;
+    }
 
-    const quaternionMessage = messages.find(
-      (msg: MessageEvent) => msg.topic === settings.quaternionTopic,
-    );
+    const msg = messages.find((m: MessageEvent) => m.topic === state.topic);
 
-    if (quaternionMessage && quaternionMessage.message) {
-      const quaternion = quaternionMessage.message as {
+    if (msg?.message != null) {
+      const quaternion = msg.message as {
         x: number;
         y: number;
         z: number;
@@ -269,7 +311,7 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
       // Apply the same rotation to the marker
       markerRef.current.quaternion.set(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
     }
-  }, [messages, settings.quaternionTopic]);
+  }, [messages, state.topic]);
 
   // invoke the done callback once the render is complete
   useEffect(() => {
