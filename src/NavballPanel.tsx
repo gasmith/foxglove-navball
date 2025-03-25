@@ -35,6 +35,7 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sphereRef = useRef<THREE.Mesh | null>(null);
+  const overlayGroupRef = useRef<THREE.Group | null>(null);
 
   // Restore state from the layout.
   const [state, setState] = useState<PanelState>(() => {
@@ -141,6 +142,39 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
     scene.add(sphere);
     sphereRef.current = sphere;
 
+    // Create overlay group
+    const overlayGroup = new THREE.Group();
+    overlayGroupRef.current = overlayGroup;
+    scene.add(overlayGroup);
+
+    // Create circle
+    const circleGeometry = new THREE.RingGeometry(0.03, 0.04, 32);
+    const circleMaterial = new THREE.MeshBasicMaterial({
+      color: 0xff0000,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.7,
+    });
+    const circle = new THREE.Mesh(circleGeometry, circleMaterial);
+
+    // Create horizontal line
+    const lineGeometry = new THREE.BufferGeometry();
+    const linePoints = [new THREE.Vector3(-0.2, 0, 0), new THREE.Vector3(0.2, 0, 0)];
+    lineGeometry.setFromPoints(linePoints);
+    const lineMaterial = new THREE.LineBasicMaterial({
+      color: 0xff0000,
+      transparent: true,
+      opacity: 0.7,
+    });
+    const line = new THREE.Line(lineGeometry, lineMaterial);
+
+    // Add elements to overlay group
+    overlayGroup.add(circle);
+    overlayGroup.add(line);
+
+    // Position overlay in front of camera
+    overlayGroup.position.z = -1.5;
+
     // Add lights
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
@@ -149,7 +183,6 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
     directionalLight.position.set(5, 5, 5);
     scene.add(directionalLight);
 
-    // Add a second directional light from the opposite direction for better illumination
     const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
     directionalLight2.position.set(-5, -5, -5);
     scene.add(directionalLight2);
@@ -157,6 +190,14 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
     // Animation loop
     const animate = () => {
       requestAnimationFrame(animate);
+
+      // Keep overlay fixed relative to camera
+      if (overlayGroupRef.current && cameraRef.current) {
+        overlayGroupRef.current.position.copy(cameraRef.current.position);
+        overlayGroupRef.current.position.z -= 1.5;
+        overlayGroupRef.current.quaternion.copy(cameraRef.current.quaternion);
+      }
+
       renderer.render(scene, camera);
     };
     animate();
