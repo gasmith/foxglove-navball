@@ -6,15 +6,7 @@ import {
   SettingsTree,
   SettingsTreeAction,
 } from "@foxglove/extension";
-import {
-  ReactElement,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { ReactElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import * as THREE from "three";
 
@@ -123,6 +115,7 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
     if (!containerRef.current) {
       return;
     }
+    const container = containerRef.current;
 
     // Create scene
     const scene = new THREE.Scene();
@@ -131,7 +124,7 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
     // Create camera
     const camera = new THREE.PerspectiveCamera(
       60,
-      containerRef.current.clientWidth / containerRef.current.clientHeight,
+      container.clientWidth / container.clientHeight,
       0.1,
       1000,
     );
@@ -142,10 +135,11 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
       alpha: true,
+      preserveDrawingBuffer: true,
     });
-    renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
+    renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setClearColor(0x000000, 0);
-    containerRef.current.appendChild(renderer.domElement);
+    container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
     // Create sphere with texture
@@ -221,37 +215,26 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
     };
     animate();
 
+    // Window resize handler.
+    const resizeObserver = new ResizeObserver(() => {
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+    });
+    resizeObserver.observe(container);
+
     // Cleanup
     return () => {
+      resizeObserver.disconnect();
+      container.removeChild(renderer.domElement);
       renderer.dispose();
-      containerRef.current?.removeChild(renderer.domElement);
-    };
-  }, []);
-
-  // Handle window resize
-  useEffect(() => {
-    const handleResize = () => {
-      if (!containerRef.current || !cameraRef.current || !rendererRef.current) {
-        return;
-      }
-
-      const width = containerRef.current.clientWidth;
-      const height = containerRef.current.clientHeight;
-
-      cameraRef.current.aspect = width / height;
-      cameraRef.current.updateProjectionMatrix();
-      rendererRef.current.setSize(width, height);
-    };
-
-    window.addEventListener("resize", handleResize);
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      return;
     };
   }, []);
 
   // Subscribe to quaternion topic
-  useLayoutEffect(() => {
+  useEffect(() => {
     context.onRender = (renderState, done) => {
       setRenderDone(() => done);
       setTopics(renderState.topics);
@@ -262,12 +245,7 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
 
     context.watch("topics");
     context.watch("currentFrame");
-
-    // Subscribe to the selected topic
-    if (state.topic) {
-      context.subscribe([{ topic: state.topic }]);
-    }
-  }, [context, state.topic]);
+  }, [context]);
 
   // Update sphere and marker rotation based on quaternion messages
   useEffect(() => {
