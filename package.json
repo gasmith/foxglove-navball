@@ -34,8 +34,6 @@
     "typescript": "5.8.2"
   },
   "dependencies": {
-    "immer": "^10.1.1",
-    "lodash": "^4.17.21",
     "three": "^0.174.0"
   }
 }

@@ -6,8 +6,6 @@ import {
   SettingsTree,
   SettingsTreeAction,
 } from "@foxglove/extension";
-import { produce } from "immer";
-import { set } from "lodash";
 import {
   ReactElement,
   useCallback,
@@ -24,6 +22,7 @@ import NavballTexture from "./NavballTexture";
 
 type PanelState = {
   topic?: string;
+  course_topic?: string;
 };
 
 function NavballPanel({ context }: { context: PanelExtensionContext }): ReactElement {
@@ -47,14 +46,30 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
     () => (topics ?? []).filter((topic) => topic.schemaName === "foxglove.Quaternion"),
     [topics],
   );
+  // Filter topics for vectors.
+  const vecTopics = useMemo(
+    () => (topics ?? []).filter((topic) => topic.schemaName === "foxglove.Vector3"),
+    [topics],
+  );
 
-  // Save settings when they change
+  // When settings change, save state.
   useEffect(() => {
-    context.saveState({ topic: state.topic });
+    context.saveState(state);
     if (state.topic) {
       context.subscribe([{ topic: state.topic }]);
     }
-  }, [context, state.topic]);
+    if (state.course_topic) {
+      context.subscribe([{ topic: state.course_topic }]);
+    }
+  }, [context, state]);
+
+  // When topics change, subscribe.
+  useEffect(() => {
+    const subs = [state.topic, state.course_topic]
+      .filter((t): t is string => t != undefined)
+      .map((t) => ({ topic: t }));
+    context.subscribe(subs);
+  }, [context, state.topic, state.course_topic]);
 
   // Use the first available quaternion topic as a default, once we have a list
   // of topics available.
@@ -65,18 +80,16 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
   }, [state.topic, quatTopics]);
 
   // Respond to actions from the settings editor.
-  const actionHandler = useCallback(
-    (action: SettingsTreeAction) => {
-      if (action.action === "update") {
-        const { path, value } = action.payload;
-        setState(produce((draft) => set(draft, path, value)));
-        if (path[1] === "topic") {
-          context.subscribe([{ topic: value as string }]);
-        }
+  const actionHandler = useCallback((action: SettingsTreeAction) => {
+    if (action.action === "update") {
+      const { path, value } = action.payload;
+      if (path[1] === "topic") {
+        setState((prev) => ({ ...prev, topic: value as string }));
+      } else if (path[1] === "course_topic") {
+        setState((prev) => ({ ...prev, course_topic: value as string }));
       }
-    },
-    [context],
-  );
+    }
+  }, []);
 
   // Define settings tree
   useEffect(() => {
@@ -87,17 +100,23 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
           label: "General",
           fields: {
             topic: {
-              label: "Topic",
+              label: "Attitude topic",
               input: "select",
               options: quatTopics.map((topic) => ({ value: topic.name, label: topic.name })),
               value: state.topic,
+            },
+            course_topic: {
+              label: "Course topic",
+              input: "select",
+              options: vecTopics.map((topic) => ({ value: topic.name, label: topic.name })),
+              value: state.course_topic,
             },
           },
         },
       },
     };
     context.updatePanelSettingsEditor(settingsTree);
-  }, [context, state.topic, quatTopics]);
+  }, [actionHandler, context, state.topic, state.course_topic, quatTopics, vecTopics]);
 
   // Initialize Three.js scene
   useEffect(() => {
@@ -268,7 +287,7 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
       // flip z and y
       sphereRef.current.quaternion.set(quaternion.x, quaternion.z, quaternion.y, quaternion.w);
     }
-  }, [messages, state.topic]);
+  }, [messages, state.topic, state.course_topic]);
 
   // invoke the done callback once the render is complete
   useEffect(() => {
