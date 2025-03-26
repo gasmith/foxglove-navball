@@ -17,6 +17,16 @@ type PanelState = {
   course_topic?: string;
 };
 
+// Define type for overlay group with course line
+type OverlayGroup = THREE.Group & {
+  courseLine?: THREE.Line;
+};
+
+// Define type for sphere with course line
+type SphereWithCourseLine = THREE.Mesh & {
+  courseLine?: THREE.Line;
+};
+
 function NavballPanel({ context }: { context: PanelExtensionContext }): ReactElement {
   const containerRef = useRef<HTMLDivElement>(null);
   const [topics, setTopics] = useState<undefined | Immutable<Topic[]>>();
@@ -25,8 +35,8 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
-  const sphereRef = useRef<THREE.Mesh | null>(null);
-  const overlayGroupRef = useRef<THREE.Group | null>(null);
+  const sphereRef = useRef<SphereWithCourseLine | null>(null);
+  const overlayGroupRef = useRef<OverlayGroup | null>(null);
 
   // Restore state from the layout.
   const [state, setState] = useState<PanelState>(() => {
@@ -155,6 +165,25 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
     scene.add(sphere);
     sphereRef.current = sphere;
 
+    // Create course indicator line
+    const courseLineGeometry = new THREE.BufferGeometry();
+    const segments = 64;
+    const courseLinePoints = [];
+    for (let i = 0; i <= segments; i++) {
+      const phi = (i / segments) * Math.PI;
+      courseLinePoints.push(new THREE.Vector3(0, 1.5 * Math.cos(phi), 1.5 * Math.sin(phi)));
+    }
+    courseLineGeometry.setFromPoints(courseLinePoints);
+    const courseLineMaterial = new THREE.LineBasicMaterial({
+      color: 0x00ff00,
+      transparent: true,
+      opacity: 0.7,
+    });
+    const courseLine = new THREE.Line(courseLineGeometry, courseLineMaterial);
+    courseLine.visible = false; // Initially hidden
+    sphere.add(courseLine); // Add to sphere instead of overlay group
+    sphereRef.current.courseLine = courseLine;
+
     // Create overlay group
     const overlayGroup = new THREE.Group();
     overlayGroupRef.current = overlayGroup;
@@ -253,10 +282,11 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
       return;
     }
 
-    const msg = messages.find((m: MessageEvent) => m.topic === state.topic);
+    const quatMsg = messages.find((m: MessageEvent) => m.topic === state.topic);
+    const courseMsg = messages.find((m: MessageEvent) => m.topic === state.course_topic);
 
-    if (msg?.message != null) {
-      const quaternion = msg.message as {
+    if (quatMsg?.message != null) {
+      const quaternion = quatMsg.message as {
         x: number;
         y: number;
         z: number;
@@ -264,6 +294,25 @@ function NavballPanel({ context }: { context: PanelExtensionContext }): ReactEle
       };
       // flip z and y
       sphereRef.current.quaternion.set(quaternion.x, quaternion.z, quaternion.y, quaternion.w);
+    }
+
+    if (courseMsg?.message != null && sphereRef.current.courseLine) {
+      const vector = courseMsg.message as {
+        x: number;
+        y: number;
+        z: number;
+      };
+      // Normalize x,y components
+      const length = Math.sqrt(vector.x * vector.x + vector.y * vector.y);
+      if (length > 0) {
+        const normalizedX = vector.x / length;
+        const normalizedY = vector.y / length;
+        const angle = Math.atan2(normalizedX, normalizedY);
+        sphereRef.current.courseLine.rotation.y = angle;
+        sphereRef.current.courseLine.visible = true;
+      }
+    } else if (sphereRef.current.courseLine) {
+      sphereRef.current.courseLine.visible = false;
     }
   }, [messages, state.topic, state.course_topic]);
 
