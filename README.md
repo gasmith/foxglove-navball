@@ -9,7 +9,7 @@ You can optionally subscribe it to a
 topic to describe a course heading, which will be represented as a green
 meridian on the sphere.
 
-![Screenshot](docs/screenshot.png)
+![Screenshot | height = 400px](docs/screenshot.png)
 
 ## Installation
 
