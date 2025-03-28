@@ -1,39 +1,21 @@
-# foxglove-navball
+# Foxglove Navball
 
-[Foxglove](https://foxglove.dev) allows developers to create [extensions](https://docs.foxglove.dev/docs/visualization/extensions/introduction), or custom code that is loaded and executed inside the Foxglove application. This can be used to add custom panels. Extensions are authored in TypeScript using the `@foxglove/extension` SDK.
+This is an attitude indicator extension for [Foxglove](https://foxglove.dev).
+You can subscribe it to a
+[Quaternion](https://docs.foxglove.dev/docs/visualization/message-schemas/quaternion)
+topic.
+You can optionally subscribe it to a
+[Vector3](https://docs.foxglove.dev/docs/visualization/message-schemas/vector-3)
+topic to describe a course heading, which will be represented as a green
+meridian on the sphere.
 
-## Develop
+![Screenshot](docs/screenshot.png)
 
-Extension development uses the `npm` package manager to install development dependencies and run build scripts.
+## Installation
 
-To install extension dependencies, run `npm` from the root of the extension package.
+With node and foxglove installed:
 
-```sh
-npm install
+```console
+$ npm install
+$ npm run local-install
 ```
-
-To build and install the extension into your local Foxglove desktop app, run:
-
-```sh
-npm run local-install
-```
-
-Open the Foxglove desktop (or `ctrl-R` to refresh if it is already open). Your extension is installed and available within the app.
-
-## Package
-
-Extensions are packaged into `.foxe` files. These files contain the metadata (package.json) and the build code for the extension.
-
-Before packaging, make sure to set `name`, `publisher`, `version`, and `description` fields in _package.json_. When ready to distribute the extension, run:
-
-```sh
-npm run package
-```
-
-This command will package the extension into a `.foxe` file in the local directory.
-
-## Publish
-
-You can publish the extension to the public registry or privately for your organization.
-
-See documentation here: https://docs.foxglove.dev/docs/visualization/extensions/publish/#packaging-your-extension
