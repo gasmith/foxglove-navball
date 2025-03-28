@@ -1,6 +1,7 @@
 # Foxglove Navball
 
 This is an attitude indicator extension for [Foxglove](https://foxglove.dev).
+
 You can subscribe it to a
 [Quaternion](https://docs.foxglove.dev/docs/visualization/message-schemas/quaternion)
 topic.
@@ -9,7 +10,7 @@ You can optionally subscribe it to a
 topic to describe a course heading, which will be represented as a green
 meridian on the sphere.
 
-![Screenshot | height = 400px](docs/screenshot.png)
+![Screenshot](docs/screenshot.png)
 
 ## Installation
 
