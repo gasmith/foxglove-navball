@@ -1,11 +1,11 @@
 {
   "name": "foxglove-navball",
-  "displayName": "foxglove-navball",
-  "description": "",
-  "publisher": "unknown",
+  "displayName": "Foxglove Navball",
+  "description": "An attitude indicator ball",
+  "publisher": "Greg Smith",
   "homepage": "",
-  "version": "0.0.0",
-  "license": "UNLICENSED",
+  "version": "0.0.1",
+  "license": "MIT",
   "main": "./dist/extension.js",
   "keywords": [],
   "scripts": {
